@@ -1,0 +1,31 @@
+{
+  "name": "amsterart",
+  "version": "1.0.0",
+  "description": "A Mastodon bot that posts art from Rijksmuseum in Amsterdam",
+  "main": "bot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stevenkuipers/Amsterart.git"
+  },
+  "keywords": [
+    "Bot",
+    "Mastodon",
+    "Rijksmuseum",
+    "Art"
+  ],
+  "author": "Steven Kuipers",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stevenkuipers/Amsterart/issues"
+  },
+  "homepage": "https://github.com/stevenkuipers/Amsterart#readme",
+  "dependencies": {
+    "dotenv": "^8.0.0",
+    "mastodon-api": "^1.3.0",
+    "request": "^2.88.0",
+    "sharp": "^0.22.1"
+  }
+}
