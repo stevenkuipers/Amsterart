@@ -1,0 +1,1 @@
+We save the image we get back from the request to output.jpg. Every new request this image will be overwritten
