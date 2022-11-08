@@ -1,10 +1,11 @@
 
-import * as dotenv from 'dotenv' // see https://github.com/motdotla/dotenv#how-do-i-use-dotenv-with-import
-dotenv.config();
-import Mastodon from 'mastodon-api'; // Mastodon API wrapper
+import * as dotenv from 'dotenv';
+import Mastodon from 'mastodon-api';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import sharp from 'sharp';
+
+dotenv.config();
 
 console.log('Amsterart Bot is running')
 console.log('---- ^-^ ----')
@@ -18,47 +19,40 @@ const M = new Mastodon({
 })
 
 const rijks_url = 'https://www.rijksmuseum.nl/api/en/collection/'
-const rijks_qs = { 
-    'imgonly': 'true',
-    'format': 'json',
-    'key': process.env.RIJKS_KEY
-};
-const params = new URLSearchParams(rijks_qs).toString();
-const url = `${rijks_url}?${params}`;
+const params = new URLSearchParams( {'imgonly': 'true', 'format': 'json', 'key': process.env.RIJKS_KEY});
  
 // First request - get all data
-const response = await fetch(url);
-const data = await response.json();
+const response = await fetch(`${rijks_url}?${params.toString()}`);
+const { facets } = await response.json();
 
-const keys = data.facets.map(obj => { 
-    var rObj = {};
-    rObj.query = obj.name;
-    rObj.values = obj.facets;
-    return rObj;
-});
+// map all keys of the facets key
+// {
+//     query: 'technique',
+//     values: [
+//       { key: 'etching', value: 148071 },
+//       { key: 'engraving', value: 107811 }
+//     ]
+// }, query: 'material',
+// values: [ ...
+const keys = facets.map( ({name, facets}) => ( {'query': name, 'values': facets} ) );
+const {query, values} = keys[rndIndex(keys)]; // Randomly select a query and key from the first response to make a request for a random piece of art
+const {key, value} = values[rndIndex(values)]
 
-// Randomly select datapoints from first request to make a request for a random piece of art
-const randomKey = keys[Math.floor(Math.random()* keys.length)];
-const randomValue = randomKey.values[Math.floor(Math.random()* randomKey.values.length)]
-let expanded_qs = {...rijks_qs};
-expanded_qs[randomKey.query] = randomValue.key;
-expanded_qs['ps'] = randomValue.value
-const updated_params = new URLSearchParams(expanded_qs).toString();
-const url2 = `${rijks_url}?${updated_params}`;
+params.append(query, key)
+params.append('ps', value)
 
-const response2 = await fetch(url2);
-const data2 = await response2.json();
+const response2 = await fetch(`${rijks_url}?${params.toString()}`);
+const { artObjects } = await response2.json();
+const {links, webImage} = artObjects[rndIndex(artObjects)]; // Here there be art
 
-// Here there be art
-let randomArtPiece = data2.artObjects[Math.floor(Math.random()* data2.artObjects.length)];
+// Get additional description for the piece
+const descResponse = await fetch(`${links.self}?${params}`);
+const { artObject } = await descResponse.json();
+const { title, scLabelLine, plaqueDescriptionEnglish } = artObject;
 
-const descResponse = await fetch(`${randomArtPiece.links.self}?${params}`);
-const description = await descResponse.json();
-
-const res = await fetch(randomArtPiece.webImage.url);
+const res = await fetch(webImage.url);
 const resBuffer = await res.buffer();
-await ShrinkSize(resBuffer, randomArtPiece.webImage.width, randomArtPiece.webImage.height);
-
+await ShrinkSize(resBuffer, webImage.width, webImage.height);
 
 // Todo: generate text for status in a seperate function and check char limit (500chars). 
 
@@ -66,24 +60,32 @@ await ShrinkSize(resBuffer, randomArtPiece.webImage.width, randomArtPiece.webIma
 M.post('media', { file: fs.createReadStream('images/output.jpg') }).then(resp => {
     const id = resp.data.id;
     M.post('statuses', { 
-        status: 
-        `${description.artObject.plaqueDescriptionEnglish || ''}\n
-        ${description.artObject.title}, ${description.artObject.scLabelLine}.\n
-        Source: ${randomArtPiece.links.web}`, media_ids: [id] },
+        status: `${title}, ${scLabelLine}.\nSource: ${links.web}`, 
+        media_ids: [id] 
+    },
     function(err, data){
         if(err){
             console.error(err)
         }else {
             console.log(`Success, id: ${data.id} was posted at ${data.url}`);
+            console.log( `${plaqueDescriptionEnglish || ''}` );
             console.log('Amsterart Bot is shutting down')
             console.log('---- ^-^ ----')
         }
     })
   });
 
+
+//   Some helper functions
+
+// resize image
   function ShrinkSize(path, width, height) {
     const resizeOptions = width > height ? { width : 650} : { height: 650}; // Biggest dimension should be 650
     const image = sharp(path).resize(resizeOptions)
     .toFile('images/output.jpg')
     return image;
+  }
+// return random index of array
+  function rndIndex(arr){
+    return Math.floor(Math.random()* arr.length)
   }
