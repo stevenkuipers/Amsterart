@@ -14,6 +14,7 @@ const rijks_url = 'https://www.rijksmuseum.nl/api/en/collection/';
 const params = new URLSearchParams({
   'imgonly': 'true',
   'format': 'json',
+  'permitDownload': 'true',
   'key': process.env.RIJKS_KEY,
 });
 
