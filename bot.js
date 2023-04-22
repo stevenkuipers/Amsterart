@@ -1,4 +1,3 @@
-
 import * as dotenv from 'dotenv';
 import { login } from 'masto';
 import fetch from 'node-fetch';
@@ -8,99 +7,134 @@ import { translate } from 'bing-translate-api';
 
 dotenv.config();
 
-console.log('Amsterart Bot is running')
-console.log('---- ^-^ ----')
+console.log('Amsterart Bot is running');
+console.log('---- ^-^ ----');
 
-const rijks_url = 'https://www.rijksmuseum.nl/api/en/collection/'
-const params = new URLSearchParams( {'imgonly': 'true', 'format': 'json', 'key': process.env.RIJKS_KEY});
- 
-// First request - get all data
-let response = await fetch(`${rijks_url}?${params.toString()}`);
-const { facets } = await response.json();
+const rijks_url = 'https://www.rijksmuseum.nl/api/en/collection/';
+const params = new URLSearchParams({
+  'imgonly': 'true',
+  'format': 'json',
+  'key': process.env.RIJKS_KEY,
+});
 
-// map all keys of the facets key
-// {
-//     query: 'technique',
-//     values: [
-//       { key: 'etching', value: 148071 },
-//       { key: 'engraving', value: 107811 }
-//     ]
-// }, query: 'material',
-// values: [ ...
+async function main() {
+  try {
+    const keys = await fetchKeys(params);
+    const { query, values } = keys[rndIndex(keys)];
+    const { key, value } = values[rndIndex(values)];
 
-const keys = facets.map( ({name, facets}) => ( {'query': name, 'values': facets} ) );
-const {query, values} = keys[rndIndex(keys)]; // Randomly select a query and key from the first response to make a request for a random piece of art
-const {key, value} = values[rndIndex(values)];
+    params.append(query, key);
+    params.append('ps', value);
 
-params.append(query, key);
-params.append('ps', value);
+    const { links, webImage } = await fetchArtObject(params);
+    const { title, scLabelLine, plaqueDescriptionEnglish } = await fetchArtObjectDetails(links.self, params);
+    const resBuffer = await fetchImage(webImage.url);
 
-response = await fetch(`${rijks_url}?${params.toString()}`);
-const { artObjects } = await response.json();
-const {links, webImage} = artObjects[rndIndex(artObjects)]; // Here there be art
+    await shrinkSize(resBuffer, webImage.width, webImage.height);
 
-// Get additional description for the piece
-response = await fetch(`${links.self}?${params}`);
-const { artObject } = await response.json();
-const { title, scLabelLine, plaqueDescriptionEnglish } = artObject;
+    let theStatus = `${title}\n${scLabelLine}.`;
 
-response = await fetch(webImage.url);
-const resBuffer = await response.buffer();
-await ShrinkSize(resBuffer, webImage.width, webImage.height);
+    try {
+      const res = await translate(theStatus, null, 'en');
+      theStatus = res.translation;
+    } catch (err) {
+      console.error(err);
+    }
 
-let theStatus = `${title}\n${scLabelLine}.`;
-
-try {
-  const res = await translate(theStatus, null, 'en');
-  theStatus = res.translation;
-} catch (err) {
-  console.error(err);
+    await postToMasto(links.web, webImage.url, theStatus, title, plaqueDescriptionEnglish);
+  } catch (error) {
+    console.error('Error:', error);
+  }
 }
 
-//Post to Mastodon
+async function fetchKeys(params) {
+  try {
+    const response = await fetch(`${rijks_url}?${params.toString()}`);
+    const { facets } = await response.json();
+    return facets.map(({ name, facets }) => ({ 'query': name, 'values': facets }));
+  } catch (error) {
+    console.error('Error fetching keys:', error);
+    throw error;
+  }
+}
 
-try {
-  const masto = await login({
-    url: 'https://botsin.space',
-    accessToken: process.env.ACCESS_TOKEN,
-  });
-  
-  const attachment = await masto.v2.mediaAttachments.create({
-    file: new Blob([fs.readFileSync('images/output.jpg')]),
-    description: `${title}`,
-    remote_url: `${webImage.url}`
-  });
+async function fetchArtObject(params) {
+  try {
+    const response = await fetch(`${rijks_url}?${params.toString()}`);
+    const { artObjects } = await response.json();
+    return artObjects[rndIndex(artObjects)];
+  } catch (error) {
+    console.error('Error fetching art object:', error);
+    throw error;
+  }
+}
 
-  const status = await masto.v1.statuses.create({
-    'status': `${theStatus}\n\nSource: ${links.web}`,
-    visibility: 'public',
-    mediaIds: [attachment.id],
-  });
+async function fetchArtObjectDetails(url, params) {
+  try {
+    const response = await fetch(`${url}?${params}`);
+    const { artObject } = await response.json();
+    return artObject;
+  } catch (error) {
+    console.error('Error fetching art object details:', error);
+    throw error;
+  }
+}
 
-  if( plaqueDescriptionEnglish){
-    const reply = await masto.v1.statuses.create({
-      'status':  `${plaqueDescriptionEnglish.slice(0, 500)}`,
-      'in_reply_to_id': status.id,
-      visibility: 'public',
+async function fetchImage(url) {
+  try {
+    const response = await fetch(url);
+    return await response.buffer();
+  } catch (error) {
+    console.error('Error fetching image:', error);
+    throw error;
+  }
+}
+
+async function postToMasto(webLink, remoteUrl, theStatus, title, plaqueDescriptionEnglish) {
+  try {
+    const masto = await login({
+      url: 'https://botsin.space',
+      accessToken: process.env.ACCESS_TOKEN,
     });
-  }
 
-  console.log('Succes: ', status.url, plaqueDescriptionEnglish ? reply.url : '')
-} catch (error) {
-  console.error('Error: ', error);
-  throw Error
+    const attachment = await masto.v2.mediaAttachments.create({
+      file: new Blob([fs.readFileSync('images/output.jpg')]),
+      description: `${title}`,
+      remote_url: `${remoteUrl}`,
+    });
+
+    const status = await masto.v1.statuses.create    ({
+      'status': `${theStatus}\n\nSource: ${webLink}`,
+      visibility: 'public',
+      mediaIds: [attachment.id],
+    });
+
+    if (plaqueDescriptionEnglish) {
+      const reply = await masto.v1.statuses.create({
+        'status': `${plaqueDescriptionEnglish.slice(0, 500)}`,
+        'in_reply_to_id': status.id,
+        visibility: 'public',
+      });
+
+      console.log('Success:', status.url, reply.url);
+    } else {
+      console.log('Success:', status.url);
+    }
+  } catch (error) {
+    console.error('Error posting to Mastodon:', error);
+    throw error;
+  }
 }
 
-//   Some helper functions
+function shrinkSize(path, width, height) {
+  const resizeOptions = width > height ? { width: 650 } : { height: 650 }; // Biggest dimension should be 650
+  const image = sharp(path).resize(resizeOptions).toFile('images/output.jpg');
+  return image;
+}
 
-// resize image
-  function ShrinkSize(path, width, height) {
-    const resizeOptions = width > height ? { width : 650} : { height: 650}; // Biggest dimension should be 650
-    const image = sharp(path).resize(resizeOptions)
-    .toFile('images/output.jpg')
-    return image;
-  }
-// return random index of array
-  function rndIndex(arr){
-    return Math.floor(Math.random()* arr.length)
-  }
+function rndIndex(arr) {
+  return Math.floor(Math.random() * arr.length);
+}
+
+// Run the main function
+main();
