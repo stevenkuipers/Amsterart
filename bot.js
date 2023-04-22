@@ -25,7 +25,11 @@ async function main() {
     const { key, value } = values[rndIndex(values)];
 
     params.append(query, key);
-    params.append('ps', value);
+    params.append('ps', Math.min(100, value)); // limit results per page to max 100
+
+    const totalPages = Math.ceil(value / params.get('ps'));
+    const randomPage = Math.floor(Math.random() * totalPages) + 1;
+    params.append('p', randomPage);
 
     const { links, webImage } = await fetchArtObject(params);
     const { title, scLabelLine, plaqueDescriptionEnglish } = await fetchArtObjectDetails(links.self, params);
