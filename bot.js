@@ -4,6 +4,7 @@ import Mastodon from 'mastodon-api';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import sharp from 'sharp';
+import { translate } from 'bing-translate-api';
 
 dotenv.config();
 
@@ -55,6 +56,16 @@ response = await fetch(webImage.url);
 const resBuffer = await response.buffer();
 await ShrinkSize(resBuffer, webImage.width, webImage.height);
 
+let theStatus = `${title}\n${scLabelLine}.`;
+
+try {
+  const res = await translate(theStatus, null, 'en');
+  console.log(res)
+  theStatus = res.translation;
+} catch (err) {
+  console.error(err);
+}
+
 // Post to Mastodon
 M.post('media', { 
     'file': fs.createReadStream('images/output.jpg'),
@@ -63,7 +74,7 @@ M.post('media', {
   }).then(resp => {
     const id = resp.data.id;
     M.post('statuses', { 
-        'status': `${title} \n ${scLabelLine}.\n\nSource: ${links.web}`, 
+        'status': `${theStatus}\n\nSource: ${links.web}`, 
         'media_ids': [id],
     },
     function(err, data){

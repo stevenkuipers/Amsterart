@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/stevenkuipers/Amsterart#readme",
   "dependencies": {
+    "bing-translate-api": "^2.9.1",
     "dotenv": "^8.0.0",
     "mastodon-api": "^1.3.0",
     "node-fetch": "^2.6.7",
