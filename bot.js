@@ -1,6 +1,6 @@
 
 import * as dotenv from 'dotenv';
-import Mastodon from 'mastodon-api';
+import { login } from 'masto';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import sharp from 'sharp';
@@ -10,14 +10,6 @@ dotenv.config();
 
 console.log('Amsterart Bot is running')
 console.log('---- ^-^ ----')
-
-// Mastodon API wrapper
-const M = new Mastodon({
-    access_token : process.env.ACCESS_TOKEN,
-    client_secret : process.env.CLIENT_SECRET,
-    client_key : process.env.CLIENT_KEY,
-    api_url: 'https://botsin.space/api/v1/'
-});
 
 const rijks_url = 'https://www.rijksmuseum.nl/api/en/collection/'
 const params = new URLSearchParams( {'imgonly': 'true', 'format': 'json', 'key': process.env.RIJKS_KEY});
@@ -66,40 +58,39 @@ try {
   console.error(err);
 }
 
-// Post to Mastodon
-M.post('media', { 
-    'file': fs.createReadStream('images/output.jpg'),
-    'description': `${title}`,
-    'remote_url': `${webImage.url}`
-  }).then(resp => {
-    const id = resp.data.id;
-    M.post('statuses', { 
-        'status': `${theStatus}\n\nSource: ${links.web}`, 
-        'media_ids': [id],
-    },
-    function(err, data){
-        if(err){
-            console.error(err)
-        }else {
-            if( plaqueDescriptionEnglish){
-              M.post('statuses', {
-                'status':  `${plaqueDescriptionEnglish.slice(0, 500)}`,
-                'in_reply_to_id': data.id
-              },
-              function(err, data){
-                if(err){
-                  console.error(err)
-                }else{
-                  console.log(`Success, ${plaqueDescriptionEnglish} was posted in reply to ${data.id}`)
-                }
-              })
-            }
-            console.log(`Success, id: ${data.id} was posted at ${data.url}`);
-            console.log('Amsterart Bot is shutting down')
-            console.log('---- ^-^ ----')
-        }
-    })
+//Post to Mastodon
+
+try {
+  const masto = await login({
+    url: 'https://botsin.space',
+    accessToken: process.env.ACCESS_TOKEN,
   });
+  
+  const attachment = await masto.v2.mediaAttachments.create({
+    file: new Blob([fs.readFileSync('images/output.jpg')]),
+    description: `${title}`,
+    remote_url: `${webImage.url}`
+  });
+
+  const status = await masto.v1.statuses.create({
+    'status': `${theStatus}\n\nSource: ${links.web}`,
+    visibility: 'public',
+    mediaIds: [attachment.id],
+  });
+
+  if( plaqueDescriptionEnglish){
+    const reply = await masto.v1.statuses.create({
+      'status':  `${plaqueDescriptionEnglish.slice(0, 500)}`,
+      'in_reply_to_id': status.id,
+      visibility: 'public',
+    });
+  }
+
+  console.log('Succes: ', status.url, plaqueDescriptionEnglish ? reply.url : '')
+} catch (error) {
+  console.error('Error: ', error);
+  throw Error
+}
 
 //   Some helper functions
 
