@@ -52,7 +52,6 @@ let theStatus = `${title}\n${scLabelLine}.`;
 
 try {
   const res = await translate(theStatus, null, 'en');
-  console.log(res)
   theStatus = res.translation;
 } catch (err) {
   console.error(err);
