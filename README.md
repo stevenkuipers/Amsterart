@@ -28,7 +28,7 @@ RIJKS_KEY=<your_rijksmuseum_api_key>
 ACCESS_TOKEN=<your_mastodon_access_token>
 ```
 
-Run the bot by executing node index.js.
+Run the bot by executing node bot.js.
 
 ## How it works
 
