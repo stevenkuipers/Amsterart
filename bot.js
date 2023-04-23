@@ -56,7 +56,7 @@ async function fetchKeys(params) {
   try {
     const response = await fetch(`${rijks_url}?${params.toString()}`);
     const { facets } = await response.json();
-    return facets.map(({ name, facets }) => ({ 'query': name, 'values': facets }));
+    return facets.map(({ name, facets }) => ({ 'query': name, 'values': facets })).filter( (el) => el.query.match(/type|material|technique/gi));;
   } catch (error) {
     console.error('Error fetching keys:', error);
     throw error;
